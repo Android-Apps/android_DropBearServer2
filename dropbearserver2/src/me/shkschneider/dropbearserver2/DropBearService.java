@@ -1,5 +1,25 @@
 package me.shkschneider.dropbearserver2;
 
+/* Much of this code was inspired by the grest WifiTether
+ * application. That code is covered by this:
+ *
+ *  This program is free software; you can redistribute it and/or modify it under 
+ *  the terms of the GNU General Public License as published by the Free Software 
+ *  Foundation; either version 3 of the License, or (at your option) any later 
+ *  version.
+ *  You should have received a copy of the GNU General Public License along with 
+ *  this program; if not, see <http://www.gnu.org/licenses/>. 
+ *  Use this application at your own risk.
+ *
+ *  Copyright (c) 2011 by Harald Mueller
+ *  
+ *  The remainder (really anything but the general framework) is:
+ *  
+ *  Copyright (c) 2013 by Tom Hite
+ *  e-mail: tdhite@tdhite.com
+ *  
+ */
+
 import java.io.File;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
@@ -173,7 +193,7 @@ public class DropBearService extends Service
 	{
 		if (intent != null)
 		{
-			start();
+			__start();
 		}
 	}
 
@@ -230,7 +250,7 @@ public class DropBearService extends Service
 			else if (wifiManager.isWifiEnabled())
 			{
 				mWifiLock = wifiManager.createWifiLock(
-						WifiManager.WIFI_MODE_FULL_HIGH_PERF,
+						WifiManager.WIFI_MODE_FULL,
 						MainActivity.class.getName());
 				if (mWifiLock == null)
 				{
@@ -365,7 +385,7 @@ public class DropBearService extends Service
 	/**
 	 * Starts the dropbear server
 	 */
-	private void start()
+	private void __start()
 	{
 		mState = State.STARTING;
 		sendStateBroadcast(mState.ordinal());
@@ -526,6 +546,15 @@ public class DropBearService extends Service
 	public static Boolean isServerRunning()
 	{
 		return (isServiceRunning() && ServerUtils.isDropbearRunning());
+	}
+
+	public static void start()
+	{
+		DropBearService singleton = getSingleton();
+		if (singleton != null)
+		{
+			singleton.__start();
+		}
 	}
 
 	public void sendStateBroadcast(int state)

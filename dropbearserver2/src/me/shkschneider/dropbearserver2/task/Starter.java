@@ -27,6 +27,7 @@ public class Starter extends Task {
 		if (DropBearService.isServiceRunning())
 		{
 			publishProgress("Started server");
+			DropBearService.start();
 			bStarted = true;
 		}
 		else
