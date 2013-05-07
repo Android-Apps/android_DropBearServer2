@@ -50,7 +50,9 @@ public class DropBearService extends Service
 	public static final String REQUESTCOUNT_INTENT = "me.shkschneider.dropbearserver2.intent.TRAFFIC";
 
 	private static final CharSequence SERVICE_NAME = "SSH Service";
+	private static final CharSequence SERVICE_STARTING = "Starting";
 	private static final CharSequence SERVICE_RUNNING = "Running";
+	private static final CharSequence SERVICE_STOPPED = "Not Running";
 
 	private static final int ID_ROOT = 0;
 
@@ -219,7 +221,7 @@ public class DropBearService extends Service
 
 	// Notification
 	@SuppressWarnings("deprecation")
-	private Notification getStartNotification()
+	private Notification setServiceNotification(CharSequence status)
 	{
 		// Assure the notification objects exist
 		this.getNotificationManager();
@@ -227,12 +229,26 @@ public class DropBearService extends Service
 		// Setup this notification
 		mNotification.flags = Notification.FLAG_ONGOING_EVENT;
 		mNotification.setLatestEventInfo(this, SERVICE_NAME,
-				SERVICE_RUNNING, mMainIntent);
+				status, mMainIntent);
 
 		// Send the notification
 		mNotificationManager.notify(-1, mNotification);
 
 		return mNotification;
+	}
+
+	private void setStatusBar()
+	{
+		if (mState.isServerRunning())
+		{
+			startForegroundCompat(-1, setServiceNotification(
+					SERVICE_RUNNING));
+		}
+		else
+		{
+			startForegroundCompat(-1, setServiceNotification(
+					SERVICE_STOPPED));
+		}
 	}
 
 	private WifiLock getWifiLock()
@@ -389,18 +405,18 @@ public class DropBearService extends Service
 	{
 		mState = State.STARTING;
 		sendStateBroadcast(mState.ordinal());
+		this.startForegroundCompat(-1, this.setServiceNotification(SERVICE_STARTING));
 
 		new Thread(new Runnable()
 		{
 			public void run()
 			{
 				// Start the dropbear daemon
-				DropBearService.this.startDropBear();
-				DropBearService.this.sendStateBroadcast(mState.ordinal());
+				startDropBear();
+				sendStateBroadcast(mState.ordinal());
+				setStatusBar();
 			}
 		}).start();
-
-		this.startForegroundCompat(-1, this.getStartNotification());
 	}
 
 	/*
@@ -415,7 +431,7 @@ public class DropBearService extends Service
 		{
 			public void run()
 			{
-				DropBearService.this.stopDropBear();
+				stopDropBear();
 
 				// Check for failed-state
 				if (mState == State.FAILURE_EXE)
@@ -423,12 +439,12 @@ public class DropBearService extends Service
 					mState = State.IDLE;
 				}
 
-				DropBearService.this.sendStateBroadcast(mState.ordinal());
-				DropBearService.this.sendManageBroadcast(State.STOPPED.ordinal());
+				sendStateBroadcast(mState.ordinal());
+				sendManageBroadcast(State.STOPPED.ordinal());
 			}
 		}).start();
 
-		DropBearService.this.stopForegroundCompat(-1);
+		stopForegroundCompat(-1);
 	}
 
 	/*************************************************************************
