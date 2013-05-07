@@ -1,10 +1,9 @@
 package me.shkschneider.dropbearserver2.task;
 
 import android.content.Context;
+import android.content.Intent;
 
-import me.shkschneider.dropbearserver2.util.L;
-import me.shkschneider.dropbearserver2.util.ServerUtils;
-import me.shkschneider.dropbearserver2.util.ShellUtils;
+import me.shkschneider.dropbearserver2.DropBearService;
 
 public class Stopper extends Task {
 
@@ -18,11 +17,24 @@ public class Stopper extends Task {
 
 	@Override
 	protected Boolean doInBackground(Void... params) {
-		ShellUtils.rm(ServerUtils.getLocalDir(mContext) + "/pid");
+		Intent intent = new Intent();
+		intent.setClass(mContext, DropBearService.class);
+		publishProgress("Stopping service");
 
-		L.i("Killing processes");
-		if (ShellUtils.killall("dropbear") == false) {
-			return falseWithError("killall(dropbear)");
+		boolean bStopped = false;
+		try
+		{
+			bStopped = mContext.stopService(intent);
+
+			if (!bStopped)
+			{
+				publishProgress("Service failed to stop!");
+			}
+		}
+		catch (SecurityException s)
+		{
+			publishProgress("Stop failed: " + s.getLocalizedMessage());
+			bStopped = false;
 		}
 
 		return true;

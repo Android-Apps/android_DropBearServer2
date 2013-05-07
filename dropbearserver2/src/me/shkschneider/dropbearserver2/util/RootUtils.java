@@ -9,7 +9,6 @@ import com.stericson.RootTools.RootTools;
 public abstract class RootUtils {
 
 	public static Boolean hasRootAccess = false;
-	public static Boolean hasBusybox = false;
 	public static Boolean hasDropbear = false;
 
 	public static final Boolean checkRootAccess() {
@@ -26,17 +25,6 @@ public abstract class RootUtils {
 			L.w("su not found");
 		}
 		return hasRootAccess;
-	}
-
-	public static final Boolean checkBusybox() {
-		hasBusybox = false;
-		if (RootTools.checkUtil("busybox")) {
-			hasBusybox = true;
-		}
-		else {
-			L.w("busybox not found");
-		}
-		return hasBusybox;
 	}
 
 	public static final Boolean checkDropbear(Context context) {

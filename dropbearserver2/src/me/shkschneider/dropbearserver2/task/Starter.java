@@ -3,16 +3,13 @@
  */
 package me.shkschneider.dropbearserver2.task;
 
+import android.content.ComponentName;
 import android.content.Context;
+import android.content.Intent;
 
-import me.shkschneider.dropbearserver2.LocalPreferences;
-import me.shkschneider.dropbearserver2.util.L;
-import me.shkschneider.dropbearserver2.util.ServerUtils;
-import me.shkschneider.dropbearserver2.util.ShellUtils;
+import me.shkschneider.dropbearserver2.DropBearService;
 
 public class Starter extends Task {
-
-	private static final int ID_ROOT = 0;
 
 	public Starter(Context context, Callback<Boolean> callback, Boolean startInBackground) {
 		super(Callback.TASK_START, context, callback, startInBackground);
@@ -24,33 +21,36 @@ public class Starter extends Task {
 
 	@Override
 	protected Boolean doInBackground(Void... params) {
-		String login = "root";
-		String passwd = LocalPreferences.getString(mContext, LocalPreferences.PREF_PASSWORD, LocalPreferences.PREF_PASSWORD_DEFAULT);
-		// String banner = ServerUtils.getLocalDir(mContext) + "/banner";
-		String hostRsa = ServerUtils.getLocalDir(mContext) + "/host_rsa";
-		String hostDss = ServerUtils.getLocalDir(mContext) + "/host_dss";
-		String authorizedKeys = ServerUtils.getLocalDir(mContext) + "/authorized_keys";
-		String listeningPort = LocalPreferences.getString(mContext, LocalPreferences.PREF_PORT, LocalPreferences.PREF_PORT_DEFAULT);
-		String pidFile = ServerUtils.getLocalDir(mContext) + "/pid";
+		Boolean bStarted = false;
 
-		String command = ServerUtils.getLocalDir(mContext) + "/dropbear";
-		command = command.concat(" -A -N " + login);
-		if (LocalPreferences.getBoolean(mContext, LocalPreferences.PREF_ALLOW_PASSWORD, LocalPreferences.PREF_ALLOW_PASSWORD_DEFAULT) == false) {
-			command = command.concat(" -s ");
+		// First, check if the service already exists
+		if (DropBearService.isServiceRunning())
+		{
+			publishProgress("Started server");
+			bStarted = true;
 		}
-		command = command.concat(" -C " + passwd);
-		command = command.concat(" -r " + hostRsa + " -d " + hostDss);
-		command = command.concat(" -R " + authorizedKeys);
-		command = command.concat(" -U " + ID_ROOT + " -G " + ID_ROOT);
-		command = command.concat(" -p " + listeningPort);
-		command = command.concat(" -P " + pidFile);
-		// command = command.concat(" -b " + banner);
-
-		L.d("Command: " + command);
-		if (ShellUtils.execute(command) == false) {
-			return falseWithError("execute(" + command + ")");
+		else
+		{
+			Intent intent = new Intent();
+			intent.setClass(mContext, DropBearService.class);
+			publishProgress("Starting service");
+	
+			ComponentName cn = null;
+			try
+			{
+				cn = mContext.startService(intent);
+				bStarted = cn != null;
+				if (!bStarted)
+				{
+					publishProgress("Service failed to start!");
+				}
+			}
+			catch (SecurityException s)
+			{
+				publishProgress("Service failed: " + s.getLocalizedMessage());
+			}
 		}
 
-		return true;
+		return bStarted;
 	}
 }

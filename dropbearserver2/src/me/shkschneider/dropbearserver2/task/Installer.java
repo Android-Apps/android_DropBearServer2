@@ -2,9 +2,12 @@ package me.shkschneider.dropbearserver2.task;
 
 import java.io.File;
 
+import android.annotation.SuppressLint;
 import android.content.Context;
 
+import me.shkschneider.dropbearserver2.LocalPreferences;
 import me.shkschneider.dropbearserver2.R;
+import me.shkschneider.dropbearserver2.util.RootUtils;
 import me.shkschneider.dropbearserver2.util.ServerUtils;
 import me.shkschneider.dropbearserver2.util.ShellUtils;
 import me.shkschneider.dropbearserver2.util.Utils;
@@ -19,76 +22,125 @@ public class Installer extends Task {
 		}
 	}
 
-	private Boolean copyToAppData(int resId, String path) {
-		if (new File(path).exists() == true && ShellUtils.rm(path) == false) {
+	@SuppressLint("NewApi")
+	private Boolean copyToAppData(int resId, String path, boolean bExecutable) {
+		if (new File(path).exists() == true
+				&& ShellUtils.deleteFile(path) == false) {
 			return falseWithError(path);
 		}
 		if (Utils.copyRawFile(mContext, resId, path) == false) {
 			return falseWithError(path);
 		}
-		if (ShellUtils.chmod(path, "755") == false) {
-			return falseWithError(path);
+
+		if (RootUtils.hasRootAccess)
+		{
+			if (ShellUtils.chmod(path, "755") == false) {
+				return falseWithError(path);
+			}
 		}
+		else
+		{
+			File pathFile = new File(path);
+			pathFile.setReadable(true, false);
+			pathFile.setWritable(true, true);
+			if (bExecutable)
+			{
+				pathFile.setExecutable(true, false);
+			}
+		}
+
 		return true;
 	}
 
+	@SuppressLint("NewApi")
 	private Boolean copyToSystemXbin(int resId, String tmp, String path) {
-		if (Utils.copyRawFile(mContext, resId, tmp) == false) {
-			return falseWithError(tmp);
+		Boolean bReturn = true;
+
+		if (RootUtils.hasRootAccess)
+		{
+			if (Utils.copyRawFile(mContext, resId, tmp) == false) {
+				bReturn = falseWithError(tmp);
+			}
+			if (ShellUtils.deleteFile(path) == false) {
+				// Ignore
+			}
+			if (ShellUtils.cp(tmp, path) == false) {
+				bReturn = falseWithError(path);
+			}
+			if (ShellUtils.deleteFile(tmp) == false) {
+				// Ignore
+			}
+			if (ShellUtils.chmod(path, "755") == false) {
+				bReturn = falseWithError(path);
+			}
 		}
-		if (ShellUtils.rm(path) == false) {
-			// Ignore
+		else
+		{
+			bReturn = copyToAppData(resId, path, true);
 		}
-		if (ShellUtils.cp(tmp, path) == false) {
-			return falseWithError(path);
-		}
-		if (ShellUtils.rm(tmp) == false) {
-			// Ignore
-		}
-		if (ShellUtils.chmod(path, "755") == false) {
-			return falseWithError(path);
-		}
-		return true;
+
+		return bReturn;
 	}
 
+	@SuppressLint("NewApi")
 	@Override
 	protected Boolean doInBackground(Void... params) {
-		String tmp = ServerUtils.getLocalDir(mContext) + "/tmp";
+		String localDir = LocalPreferences.getLocalFilesDir(mContext);
+		String tmp = localDir;
+		String xbin = localDir;
+
+		if (RootUtils.hasRootAccess)
+		{
+			tmp = localDir + "/tmp";
+			xbin = "/system/xbin";
+		}
 
 		publishProgress("Dropbear binary");
-		copyToAppData(R.raw.dropbear, ServerUtils.getLocalDir(mContext) + "/dropbear");
+		copyToAppData(R.raw.dropbear, localDir + "/dropbear", true);
 
 		publishProgress("Dropbearkey binary");
-		copyToAppData(R.raw.dropbearkey, ServerUtils.getLocalDir(mContext) + "/dropbearkey");
+		copyToAppData(R.raw.dropbearkey, localDir + "/dropbearkey", true);
 
-		publishProgress("Remount Read-Write");
-		if (Utils.remountReadWrite("/system") == false) {
-			return falseWithError("/system RW");
+		if (RootUtils.hasRootAccess)
+		{
+			publishProgress("Remount Read-Write");
+			if (Utils.remountReadWrite("/system") == false) {
+				return falseWithError("/system RW");
+			}
 		}
 
 		publishProgress("SSH binary");
-		copyToSystemXbin(R.raw.ssh, tmp, "/system/xbin/ssh");
+		copyToSystemXbin(R.raw.ssh, tmp, xbin + "/ssh");
 
 		publishProgress("SCP binary");
-		copyToSystemXbin(R.raw.scp, tmp, "/system/xbin/scp");
+		copyToSystemXbin(R.raw.scp, tmp, xbin + "/scp");
 
 		publishProgress("DBClient binary");
-		copyToSystemXbin(R.raw.dbclient, tmp, "/system/xbin/dbclient");
+		copyToSystemXbin(R.raw.dbclient, tmp, xbin + "/dbclient");
 
 		publishProgress("SFTP binary");
-		copyToSystemXbin(R.raw.sftp_server, tmp, "/system/xbin/sftp-server");
+		copyToSystemXbin(R.raw.sftp_server, tmp, xbin + "/sftp-server");
 
-		publishProgress("Remount Read-Only");
-		if (Utils.remountReadOnly("/system") == false) {
-			return falseWithError("/system RO");
+		if (RootUtils.hasRootAccess)
+		{
+			publishProgress("Remount Read-Only");
+			if (Utils.remountReadOnly("/system") == false) {
+				return falseWithError("/system RO");
+			}
+
+			publishProgress("Permissions");
+			if (ShellUtils.chmod("/data/local", "755") == false) {
+				return falseWithError("/data/local");
+			}
 		}
 
 		publishProgress("Banner");
-		copyToAppData(R.raw.banner, ServerUtils.getLocalDir(mContext) + "/banner");
+		copyToAppData(R.raw.banner, localDir + "/banner", false);
 
 		publishProgress("Authorized keys");
-		String authorized_keys = ServerUtils.getLocalDir(mContext) + "/authorized_keys";
-		if (new File(authorized_keys).exists() == true && ShellUtils.rm(authorized_keys) == false) {
+		String authorized_keys = localDir + "/authorized_keys";
+		if (new File(authorized_keys).exists()
+				&& !ShellUtils.deleteFile(authorized_keys)) {
 			return falseWithError(authorized_keys);
 		}
 		if (ServerUtils.createIfNeeded(authorized_keys) == false) {
@@ -96,8 +148,10 @@ public class Installer extends Task {
 		}
 
 		publishProgress("Host RSA key");
-		String host_rsa = ServerUtils.getLocalDir(mContext) + "/host_rsa";
-		if (new File(host_rsa).exists() == true && ShellUtils.rm(host_rsa) == false) {
+		String host_rsa = localDir + "/host_rsa";
+		File keyFile = new File(host_rsa);
+		if (keyFile.exists() && !ShellUtils.deleteFile(host_rsa))
+		{
 			return falseWithError(host_rsa);
 		}
 		if (ServerUtils.generateRsaPrivateKey(host_rsa) == false) {
@@ -105,26 +159,34 @@ public class Installer extends Task {
 		}
 
 		publishProgress("Host DSS key");
-		String host_dss = ServerUtils.getLocalDir(mContext) + "/host_dss";
-		if (new File(host_dss).exists() == true && ShellUtils.rm(host_dss) == false) {
-			return falseWithError(host_dss);
+		String host_dss = localDir + "/host_dss";
+		keyFile = new File(host_dss);
+		if (keyFile.exists() && !ShellUtils.deleteFile(host_dss)) {
+			falseWithError(host_dss);
 		}
 		if (ServerUtils.generateDssPrivateKey(host_dss) == false) {
 			return falseWithError(host_dss);
 		}
 
-		publishProgress("Permissions");
-		if (ShellUtils.chmod("/data/local", "755") == false) {
-			return falseWithError("/data/local");
+		if (RootUtils.hasRootAccess)
+		{
+			if (ShellUtils.chmod(authorized_keys, "644") == false) {
+				return falseWithError(authorized_keys);
+			}
+
+			if (ShellUtils.chown(host_rsa, "0:0") == false) {
+				return falseWithError(host_rsa);
+			}
+			if (ShellUtils.chown(host_dss, "0:0") == false) {
+				return falseWithError(host_dss);
+			}
 		}
-		if (ShellUtils.chmod(authorized_keys, "644") == false) {
-			return falseWithError(authorized_keys);
-		}
-		if (ShellUtils.chown(host_rsa, "0:0") == false) {
-			return falseWithError(host_rsa);
-		}
-		if (ShellUtils.chown(host_dss, "0:0") == false) {
-			return falseWithError(host_dss);
+		else
+		{
+			File pathFile = new File(authorized_keys);
+			pathFile.setReadable(true, false);
+			pathFile.setWritable(true, true);
+			pathFile.setExecutable(false);
 		}
 
 		return true;

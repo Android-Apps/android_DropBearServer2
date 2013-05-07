@@ -3,6 +3,8 @@
  */
 package me.shkschneider.dropbearserver2.util;
 
+import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.concurrent.TimeoutException;
 
@@ -10,6 +12,12 @@ import com.stericson.RootTools.CommandCapture;
 import com.stericson.RootTools.RootTools;
 
 public abstract class ShellUtils {
+	private static final String CMD_RM = "rm";
+	private static final String CMD_CHOWN = "chown";
+	private static final String CMD_CHMOD = "chmod";
+	private static final String CMD_MV = "mv";
+	private static final String CMD_CP = "cp";
+	private static final String CMD_KILL = "kill";
 
 	public static final Boolean execute(String command) {
 		CommandCapture commands = new CommandCapture(0, command);
@@ -29,68 +37,40 @@ public abstract class ShellUtils {
 		return false;
 	}
 
-	public static final Boolean mkdir(String path) {
-		return execute("mkdir " + path);
-	}
-
-	public static final Boolean mkdirRecursive(String path) {
-		return execute("mkdir -p " + path);
-	}
-
 	public static final Boolean chown(String path, String owner) {
-		return execute("chown " + owner + " " + path);
-	}
-
-	public static final Boolean chownRecursive(String path, String owner) {
-		return execute("chown -R " + owner + " " + path);
+		return execute(CMD_CHOWN + " " + owner + " " + path);
 	}
 
 	public static final Boolean chmod(String path, String chmod) {
-		return execute("chmod " + chmod + " " + path);
+		return execute(CMD_CHMOD + " " + chmod + " " + path);
 	}
 
-	public static final Boolean chmodRecursive(String path, String chmod) {
-		return execute("chmod -R " + chmod + " " + path);
-	}
-
-	public static final Boolean touch(String path) {
-		return execute("echo -n '' > " + path);
-	}
-
-	public static final Boolean rm(String path) {
-		return execute("rm -f " + path);
-	}
-
-	public static final Boolean rmRecursive(String path) {
-		return execute("rm -rf " + path);
+	private static final Boolean rm(String path) {
+		return execute(CMD_RM + " " + path);
 	}
 
 	public static final Boolean mv(String srcPath, String destPath) {
-		return execute("mv " + srcPath + " " + destPath);
+		return execute(CMD_MV + " " + srcPath + " " + destPath);
 	}
 
 	public static final Boolean cp(String srcPath, String destPath) {
-		return execute("cp " + srcPath + " " + destPath);
+		return execute(CMD_CP + " " + srcPath + " " + destPath);
 	}
 
-	public static final Boolean cpRecursive(String srcPath, String destPath) {
-		return execute("cp -r " + srcPath + " " + destPath);
+	public static final Boolean kill(String processId) {
+		return execute(CMD_KILL + " " + processId);
 	}
 
-	public static final Boolean echoToFile(String text, String path) {
-		return execute("echo '" + text + "' > " + path);
-	}
-
-	public static final Boolean echoAppendToFile(String text, String path) {
-		return execute("echo '" + text + "' >> " + path);
-	}
-
-	public static final Boolean lnSymbolic(String srcPath, String destPath) {
-		return execute("ln -s " + srcPath + " " + destPath);
+	public static final Boolean killPidFile(String pidFile) {
+		return execute(CMD_KILL + " $(cat " + pidFile + ")");
 	}
 
 	public static final Boolean killall(String processName) {
-		return execute("killall " + processName);
+		return execute("for pid in $(ps "
+				+ processName
+				+ " | awk '/"
+				+ processName
+				+ "/ {print $2}'); do kill $pid; done");
 	}
 
 	public static final Boolean remountReadWrite(String path) {
@@ -99,5 +79,127 @@ public abstract class ShellUtils {
 
 	public static final Boolean remountReadOnly(String path) {
 		return RootTools.remount(path, "RO");
+	}
+
+    public static Boolean deleteFile(String fileName)
+    {
+    	Boolean bDeleted = false;
+
+    	if (RootUtils.hasRootAccess)
+    	{
+    		bDeleted = ShellUtils.rm(fileName);
+    	}
+    	else
+    	{
+	    	try
+	    	{
+	    		File file = new File(fileName);
+	    		bDeleted = file.delete();
+	    	}
+	    	catch(Exception e)
+	    	{
+	    		bDeleted = false;
+	    	}
+    	}
+
+    	return bDeleted;
+    }
+
+	/**
+	 *
+	    DEScribe - A Discrete Experience Sampling cross platform application
+	    Copyright (C) 2011
+	    Sébastien Faure <sebastien.faure3@gmail.com>,
+	    Bertrand Gros   <gros.bertrand@gmail.com>,
+	    Yannick Prie    <yannick.prie@univ-lyon1.fr>.
+
+	    This program is free software: you can redistribute it and/or modify
+	    it under the terms of the GNU General Public License as published by
+	    the Free Software Foundation, either version 3 of the License, or
+	    (at your option) any later version.
+
+	    This program is distributed in the hope that it will be useful,
+	    but WITHOUT ANY WARRANTY; without even the implied warranty of
+	    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+	    GNU General Public License for more details.
+
+	    You should have received a copy of the GNU General Public License
+	    along with this program.  If not, see <http://www.gnu.org/licenses/>.
+	 *
+	 */
+
+	/**
+	 * copie le fichier source dans le fichier resultat retourne vrai si cela
+	 * réussit
+	 */
+	public static Boolean copyFile(File source, File dest)
+	{
+		try
+		{
+			// Declaration et ouverture des flux
+			java.io.FileInputStream sourceFile = new java.io.FileInputStream(
+					source);
+
+			try
+			{
+				java.io.FileOutputStream destinationFile = null;
+
+				try
+				{
+					destinationFile = new FileOutputStream(dest);
+
+					// Lecture par segment de 0.5Mo
+					byte buffer[] = new byte[512 * 1024];
+					int nbLecture;
+
+					while ((nbLecture = sourceFile.read(buffer)) != -1)
+					{
+						destinationFile.write(buffer, 0, nbLecture);
+					}
+				}
+				finally
+				{
+					destinationFile.close();
+				}
+			}
+			finally
+			{
+				sourceFile.close();
+			}
+		}
+		catch (IOException e)
+		{
+			e.printStackTrace();
+			return false; // Erreur
+		}
+
+		return true; // Résultat OK
+	}
+
+	/**
+	 * Déplace le fichier source dans le fichier résultat
+	 */
+	public static Boolean moveFile(File source, File destination)
+	{
+		if (!destination.exists())
+		{
+			// On essaye avec renameTo
+			boolean result = source.renameTo(destination);
+			if (!result)
+			{
+				// On essaye de copier
+				result = true;
+				result &= copyFile(source, destination);
+				if (result)
+					result &= source.delete();
+
+			}
+			return (result);
+		}
+		else
+		{
+			// Si le fichier destination existe, on annule ...
+			return (false);
+		}
 	}
 }

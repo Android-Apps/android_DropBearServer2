@@ -190,11 +190,7 @@ public class MainActivity extends SherlockActivity implements View.OnClickListen
 			mStatus = STATUS_NOT_READY;
 			stdout("Server not ready (root access denied)");
 		}
-		else if (RootUtils.hasBusybox == false) {
-			mStatus = STATUS_NOT_READY;
-			stdout("Server not ready (busybox missing)");
-		}
-		else if (ServerUtils.dropbearRunning == true) {
+		else if (DropBearService.isServerRunning() == true) {
 			mStatus = STATUS_STARTED;
 			stdout("Server started on port " + LocalPreferences.getString(getApplicationContext(), LocalPreferences.PREF_PORT, LocalPreferences.PREF_PORT_DEFAULT));
 

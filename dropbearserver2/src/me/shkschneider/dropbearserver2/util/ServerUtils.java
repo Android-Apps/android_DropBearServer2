@@ -25,8 +25,11 @@ import java.util.ArrayList;
 import java.util.Enumeration;
 import java.util.List;
 
+import me.shkschneider.dropbearserver2.LocalPreferences;
+
 import org.apache.http.conn.util.InetAddressUtils;
 
+import android.annotation.SuppressLint;
 import android.content.Context;
 
 public abstract class ServerUtils {
@@ -71,10 +74,11 @@ public abstract class ServerUtils {
 	public static final Boolean isDropbearRunning() {
 		dropbearRunning = false;
 		try {
-			Process suProcess = Runtime.getRuntime().exec("su");
+			String cmd = RootUtils.hasRootAccess ? "su" : "sh";
+			Process process = Runtime.getRuntime().exec(cmd);
 
 			// stdin
-			DataOutputStream stdin = new DataOutputStream(suProcess.getOutputStream());
+			DataOutputStream stdin = new DataOutputStream(process.getOutputStream());
 			L.d("# ps dropbear");
 			stdin.writeBytes("ps dropbear\n");
 			stdin.flush();
@@ -82,7 +86,7 @@ public abstract class ServerUtils {
 			stdin.flush();
 
 			// stdout
-			BufferedReader reader = new BufferedReader(new InputStreamReader(suProcess.getInputStream()));
+			BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
 			String line;
 			while ((line = reader.readLine()) != null) {
 				if (line.endsWith("dropbear") == true) {
@@ -98,13 +102,88 @@ public abstract class ServerUtils {
 	}
 
 	// WARNING: this is not threaded
+	@SuppressLint("NewApi")
 	public static final Boolean generateRsaPrivateKey(String path) {
-		return ShellUtils.execute(ServerUtils.getLocalDir(null) + "/dropbearkey -t rsa -f " + path);
+		Boolean bReturn = false;
+
+		if (RootUtils.hasRootAccess)
+		{
+			bReturn = ShellUtils.execute(
+					LocalPreferences.getLocalFilesDir(null)
+					+ "/dropbearkey -t rsa -f " + path);
+		}
+		else
+		{
+			try
+			{
+				File tmpFile = File.createTempFile("__db2", null, new File("/tmp"));
+				File rsaFile = new File(path);
+				tmpFile.setReadable(true,  false);
+				tmpFile.setWritable(true,  false);
+				tmpFile.setExecutable(false);
+				String cmd = LocalPreferences.getLocalFilesDir(null)
+						+ "/dropbearkey -t rsa -f " + tmpFile.getAbsolutePath();
+				bReturn = ShellUtils.execute(cmd);
+				if (bReturn)
+				{
+					// copy the file into place
+					ShellUtils.moveFile(tmpFile.getAbsoluteFile(), rsaFile);
+				}
+			}
+			catch(IOException ioe)
+			{
+				bReturn = false;
+			}
+		}
+
+		return bReturn;
 	}
 
 	// WARNING: this is not threaded
+	@SuppressLint("NewApi")
 	public static final Boolean generateDssPrivateKey(String path) {
-		return ShellUtils.execute(ServerUtils.getLocalDir(null) + "/dropbearkey -t dss -f " + path);
+		Boolean bReturn = false;
+
+		if (RootUtils.hasRootAccess)
+		{
+			bReturn = ShellUtils.execute(
+					LocalPreferences.getLocalFilesDir(null)
+					+ "/dropbearkey -t dss -f " + path);
+		}
+		else
+		{
+			File tmpFile = null;
+	
+			try
+			{
+				File dssFile = new File(path);
+				tmpFile = File.createTempFile("__db2", null, new File("/tmp"));
+				tmpFile.setReadable(true,  false);
+				tmpFile.setWritable(true,  false);
+				tmpFile.setExecutable(false);
+				String cmd = LocalPreferences.getLocalFilesDir(null)
+							+ "/dropbearkey -t dss -f " + tmpFile.getAbsolutePath();
+				bReturn = ShellUtils.execute(cmd);
+				if (bReturn)
+				{
+					// copy the file into place
+					ShellUtils.moveFile(tmpFile, dssFile);
+				}
+			}
+			catch(IOException ioe)
+			{
+				bReturn = false;
+			}
+			finally
+			{
+				if (tmpFile != null)
+				{
+					tmpFile.delete();
+				}
+			}
+		}
+
+		return bReturn;
 	}
 
 	// WARNING: this is not threaded
@@ -195,29 +274,34 @@ public abstract class ServerUtils {
 	}
 
 	public static final Boolean createIfNeeded(String path) {
+		Boolean bReturn = false;
+
 		File file = new File(path);
 		if (file.exists() == false) {
 			try {
 				file.createNewFile();
-				return true;
+				bReturn = true;
 			}
 			catch (IOException e) {
 				L.e("IOException: " + e.getMessage());
 			}
 		}
-		return false;
+
+		return bReturn;
 	}
 
 	// WARNING: this is not threaded
 	public static final String getDropbearVersion(Context context) {
 		dropbearVersion = null;
 		try {
-			Process suProcess = Runtime.getRuntime().exec("su");
+			String cmd = RootUtils.hasRootAccess ? "su" : "sh";
+			Process suProcess = Runtime.getRuntime().exec(cmd);
 
 			// stdin
 			DataOutputStream stdin = new DataOutputStream(suProcess.getOutputStream());
 			L.d("# dropbear -h");
-			stdin.writeBytes(ServerUtils.getLocalDir(context) + "/dropbear -h 2>&1 | busybox head -1\n");
+			stdin.writeBytes(LocalPreferences.getLocalFilesDir(context)
+					+ "/dropbear -h 2>&1 | head -n 1\n");
 			stdin.flush();
 			stdin.writeBytes("exit\n");
 			stdin.flush();
