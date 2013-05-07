@@ -19,6 +19,8 @@ import android.net.wifi.WifiManager;
 import android.net.wifi.WifiManager.WifiLock;
 import android.os.Binder;
 import android.os.IBinder;
+import android.os.PowerManager;
+import android.os.PowerManager.WakeLock;
 import android.widget.Toast;
 
 public class DropBearService extends Service
@@ -64,7 +66,8 @@ public class DropBearService extends Service
 	private Notification mNotification = null;
 
 	// Wifi performance
-	private WifiLock mWifiLock = null;
+	private static WifiLock mWifiLock = null;
+    private static WakeLock mWakeLock = null;
 
 	// Intents
 	private PendingIntent mMainIntent = null;
@@ -214,34 +217,39 @@ public class DropBearService extends Service
 
 	private WifiLock getWifiLock()
 	{
-		if (mWifiLock == null && android.os.Build.VERSION.SDK_INT > 11)
+		try
 		{
-			try
+			WifiManager wifiManager = (WifiManager)
+					this.getSystemService(Context.WIFI_SERVICE);
+			if (wifiManager == null)
 			{
-				WifiManager wifiManager = (WifiManager)
-						this.getSystemService(Context.WIFI_SERVICE);
-				if (wifiManager == null)
-				{
-					Toast.makeText(this,
-							"Could not get WifiManager!",
-							Toast.LENGTH_SHORT).show();
-				}
-				else if (wifiManager.isWifiEnabled())
-				{
-					mWifiLock = wifiManager.createWifiLock(
-							WifiManager.WIFI_MODE_FULL_HIGH_PERF,
-							MainActivity.class.getName());
-					if (mWifiLock == null)
-					{
-						Toast.makeText(this, "Could not get WifiLock!", Toast.LENGTH_SHORT).show();
-					}
-				}
-			}
-			catch(Exception e)
-			{
-				Toast.makeText(this, "Could not lock Wifi: " + e.getMessage(),
+				Toast.makeText(this,
+						"Could not get WifiManager!",
 						Toast.LENGTH_SHORT).show();
 			}
+			else if (wifiManager.isWifiEnabled())
+			{
+				mWifiLock = wifiManager.createWifiLock(
+						WifiManager.WIFI_MODE_FULL_HIGH_PERF,
+						MainActivity.class.getName());
+				if (mWifiLock == null)
+				{
+					Toast.makeText(this, "Could not get WifiLock!", Toast.LENGTH_SHORT).show();
+				}
+
+		        mWakeLock = ((PowerManager) this.getSystemService(Context.POWER_SERVICE))
+                        .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "WlanSilencerWakeLock");
+				if (mWakeLock == null)
+				{
+					Toast.makeText(this, "Could not get WakeLock!", Toast.LENGTH_SHORT).show();
+				}
+
+			}
+		}
+		catch(Exception e)
+		{
+			Toast.makeText(this, "Could not lock Wifi: " + e.getMessage(),
+					Toast.LENGTH_SHORT).show();
 		}
 
 		return mWifiLock;
@@ -258,6 +266,11 @@ public class DropBearService extends Service
 				mWifiLock.acquire();
 			}
 		}
+		if (mWakeLock != null)
+		{
+			mWakeLock.setReferenceCounted(false);
+			mWakeLock.acquire();
+		}
 	}
 
 	private void stopWifiLock()
@@ -265,6 +278,10 @@ public class DropBearService extends Service
 		if (mWifiLock != null)
 		{
 			mWifiLock.release();
+		}
+		if (mWakeLock != null)
+		{
+			mWakeLock.release();
 		}
 	}
 
