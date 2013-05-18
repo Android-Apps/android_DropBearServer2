@@ -70,7 +70,7 @@ public abstract class ShellUtils {
 				+ processName
 				+ " | awk '/"
 				+ processName
-				+ "/ {print $2}'); do kill $pid; done");
+				+ "$/ {print $2}'); do kill $pid; done");
 	}
 
 	public static final Boolean remountReadWrite(String path) {

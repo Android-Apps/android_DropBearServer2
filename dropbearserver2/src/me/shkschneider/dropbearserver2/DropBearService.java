@@ -23,6 +23,7 @@ package me.shkschneider.dropbearserver2;
 import java.io.File;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.util.UUID;
 
 import me.shkschneider.dropbearserver2.util.L;
 import me.shkschneider.dropbearserver2.util.RootUtils;
@@ -50,7 +51,9 @@ public class DropBearService extends Service
 	public static final String REQUESTCOUNT_INTENT = "me.shkschneider.dropbearserver2.intent.TRAFFIC";
 
 	private static final CharSequence SERVICE_NAME = "SSH Service";
+	private static final CharSequence SERVICE_STARTING = "Starting";
 	private static final CharSequence SERVICE_RUNNING = "Running";
+	private static final CharSequence SERVICE_STOPPED = "Not Running";
 
 	private static final int ID_ROOT = 0;
 
@@ -219,7 +222,7 @@ public class DropBearService extends Service
 
 	// Notification
 	@SuppressWarnings("deprecation")
-	private Notification getStartNotification()
+	private Notification setServiceNotification(CharSequence status)
 	{
 		// Assure the notification objects exist
 		this.getNotificationManager();
@@ -227,12 +230,26 @@ public class DropBearService extends Service
 		// Setup this notification
 		mNotification.flags = Notification.FLAG_ONGOING_EVENT;
 		mNotification.setLatestEventInfo(this, SERVICE_NAME,
-				SERVICE_RUNNING, mMainIntent);
+				status, mMainIntent);
 
 		// Send the notification
 		mNotificationManager.notify(-1, mNotification);
 
 		return mNotification;
+	}
+
+	private void setStatusBar()
+	{
+		if (mState.isServerRunning())
+		{
+			startForegroundCompat(-1, setServiceNotification(
+					SERVICE_RUNNING));
+		}
+		else
+		{
+			startForegroundCompat(-1, setServiceNotification(
+					SERVICE_STOPPED));
+		}
 	}
 
 	private WifiLock getWifiLock()
@@ -313,7 +330,7 @@ public class DropBearService extends Service
 		// start a fresh copy with the current settings
 		String localDir = LocalPreferences.getLocalFilesDir(this);
 		String login = "root";
-		String passwd = LocalPreferences.getString(this, LocalPreferences.PREF_PASSWORD, LocalPreferences.PREF_PASSWORD_DEFAULT);
+		String passwd = null;
 		// String banner = localDir + "/banner";
 		String hostRsa = localDir + "/host_rsa";
 		String hostDss = localDir + "/host_dss";
@@ -323,7 +340,11 @@ public class DropBearService extends Service
 
 		String command = localDir + "/dropbear";
 		command = command.concat(" -A -N " + login);
-		if (LocalPreferences.getBoolean(this, LocalPreferences.PREF_ALLOW_PASSWORD, LocalPreferences.PREF_ALLOW_PASSWORD_DEFAULT) == false) {
+		if (LocalPreferences.getBoolean(this, LocalPreferences.PREF_ALLOW_PASSWORD, LocalPreferences.PREF_ALLOW_PASSWORD_DEFAULT)) {
+			passwd = LocalPreferences.getString(this, LocalPreferences.PREF_PASSWORD, LocalPreferences.PREF_PASSWORD_DEFAULT);
+		} else {
+			// just create a random string for the passwd -- its useless anyway
+			passwd = UUID.randomUUID().toString();
 			command = command.concat(" -s ");
 		}
 		command = command.concat(" -C " + passwd);
@@ -360,7 +381,7 @@ public class DropBearService extends Service
 
 	private Boolean stopDropBear()
 	{
-		Boolean bReturn = true;
+		Boolean bReturn = false;
 
 		// kill the wifilock
 		stopWifiLock();
@@ -369,15 +390,15 @@ public class DropBearService extends Service
 		String localDir = LocalPreferences.getLocalFilesDir(this);
 		File pidFile = new File(localDir + "/pid");
 
-		if (pidFile.exists())
-		{
-			L.i("Killing process by pid file" + pidFile);
-			bReturn = ShellUtils.killPidFile(pidFile.getAbsolutePath())
-					&& ShellUtils.deleteFile(pidFile.getAbsolutePath());
-		}
+//		if (pidFile.exists())
+//		{
+//			L.i("Killing process by pid file" + pidFile);
+//			bReturn = ShellUtils.killPidFile(pidFile.getAbsolutePath())
+//					&& ShellUtils.deleteFile(pidFile.getAbsolutePath());
+//		}
 
 		// Really? This means we kill *any* dropbear server.
-		//bReturn = ShellUtils.killall("dropbear");
+		bReturn = ShellUtils.killall("dropbear");
 
 		return bReturn;
 	}
@@ -389,18 +410,18 @@ public class DropBearService extends Service
 	{
 		mState = State.STARTING;
 		sendStateBroadcast(mState.ordinal());
+		this.startForegroundCompat(-1, this.setServiceNotification(SERVICE_STARTING));
 
 		new Thread(new Runnable()
 		{
 			public void run()
 			{
 				// Start the dropbear daemon
-				DropBearService.this.startDropBear();
-				DropBearService.this.sendStateBroadcast(mState.ordinal());
+				startDropBear();
+				sendStateBroadcast(mState.ordinal());
+				setStatusBar();
 			}
 		}).start();
-
-		this.startForegroundCompat(-1, this.getStartNotification());
 	}
 
 	/*
@@ -415,7 +436,7 @@ public class DropBearService extends Service
 		{
 			public void run()
 			{
-				DropBearService.this.stopDropBear();
+				stopDropBear();
 
 				// Check for failed-state
 				if (mState == State.FAILURE_EXE)
@@ -423,12 +444,12 @@ public class DropBearService extends Service
 					mState = State.IDLE;
 				}
 
-				DropBearService.this.sendStateBroadcast(mState.ordinal());
-				DropBearService.this.sendManageBroadcast(State.STOPPED.ordinal());
+				sendStateBroadcast(mState.ordinal());
+				sendManageBroadcast(State.STOPPED.ordinal());
 			}
 		}).start();
 
-		DropBearService.this.stopForegroundCompat(-1);
+		stopForegroundCompat(-1);
 	}
 
 	/*************************************************************************
