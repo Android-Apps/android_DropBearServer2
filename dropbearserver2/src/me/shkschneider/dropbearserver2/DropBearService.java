@@ -20,7 +20,6 @@ package me.shkschneider.dropbearserver2;
  *  
  */
 
-import java.io.File;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.UUID;
@@ -102,6 +101,9 @@ public class DropBearService extends Service
 	private Object[] mStartForegroundArgs = new Object[2];
 	private Object[] mStopForegroundArgs = new Object[1];
 	private Object[] mSetForegroundArgs = new Object[1];
+
+	// Files
+	private static final String PID_FILE_RELATIVE_PATH = "/dropbear.pid";
 
 	private static final Class<?>[] mSetForegroundSignature = new Class[]
 		{
@@ -336,26 +338,28 @@ public class DropBearService extends Service
 		String hostDss = localDir + "/host_dss";
 		String authorizedKeys = localDir + "/authorized_keys";
 		Long listeningPort = LocalPreferences.getListeningPort(this);
-		String pidFile = localDir + "/pid";
 
-		String command = localDir + "/dropbear";
-		command = command.concat(" -A -N " + login);
+		StringBuilder command = new StringBuilder();
+		command.append(localDir);
+		command.append("/dropbear");
+		command = command.append(" -A -N " + login);
 		if (LocalPreferences.getBoolean(this, LocalPreferences.PREF_ALLOW_PASSWORD, LocalPreferences.PREF_ALLOW_PASSWORD_DEFAULT)) {
 			passwd = LocalPreferences.getString(this, LocalPreferences.PREF_PASSWORD, LocalPreferences.PREF_PASSWORD_DEFAULT);
 		} else {
 			// just create a random string for the passwd -- its useless anyway
 			passwd = UUID.randomUUID().toString();
-			command = command.concat(" -s ");
+			command.append(" -s ");
 		}
-		command = command.concat(" -C " + passwd);
-		command = command.concat(" -r " + hostRsa + " -d " + hostDss);
-		command = command.concat(" -R " + authorizedKeys);
-		command = command.concat(" -p " + listeningPort);
-		command = command.concat(" -P " + pidFile);
+		command.append(" -C ").append(passwd);
+		command.append(" -r ").append(hostRsa);
+		command.append(" -d ").append(hostDss);
+		command.append(" -R ").append(authorizedKeys);
+		command.append(" -p ").append(listeningPort);
+		command.append(" -P ").append(localDir).append(PID_FILE_RELATIVE_PATH);
 
 		if (RootUtils.hasRootAccess)
 		{
-			command = command.concat(" -U " + ID_ROOT + " -G " + ID_ROOT);
+			command = command.append(" -U " + ID_ROOT + " -G " + ID_ROOT);
 		}
 
 		// command = command.concat(" -b " + banner);
@@ -366,7 +370,7 @@ public class DropBearService extends Service
 		// Start the service here.
 		L.d("Command: " + command);
 
-		if (ShellUtils.execute(command))
+		if (ShellUtils.execute(command.toString()))
 		{
 			mState = ServerUtils.isDropbearRunning() ?
 					State.RUNNING : State.FAILURE_LOG;
@@ -387,9 +391,8 @@ public class DropBearService extends Service
 		stopWifiLock();
 
 		// kill any processes
-		String localDir = LocalPreferences.getLocalFilesDir(this);
-		File pidFile = new File(localDir + "/pid");
-
+//		String localDir = LocalPreferences.getLocalFilesDir(this);
+//		File pidFile = new File(localDir + PID_FILE_RELATIVE_PATH);
 //		if (pidFile.exists())
 //		{
 //			L.i("Killing process by pid file" + pidFile);

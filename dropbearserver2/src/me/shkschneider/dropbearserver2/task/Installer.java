@@ -86,14 +86,8 @@ public class Installer extends Task {
 	@Override
 	protected Boolean doInBackground(Void... params) {
 		String localDir = LocalPreferences.getLocalFilesDir(mContext);
-		String tmp = localDir;
-		String xbin = localDir;
-
-		if (RootUtils.hasRootAccess)
-		{
-			tmp = localDir + "/tmp";
-			xbin = "/system/xbin";
-		}
+		String tmp = localDir + "/tmp";
+		String xbin = RootUtils.hasRootAccess ? "/system/xbin" : localDir;
 
 		publishProgress("Dropbear binary");
 		copyToAppData(R.raw.dropbear, localDir + "/dropbear", true);
