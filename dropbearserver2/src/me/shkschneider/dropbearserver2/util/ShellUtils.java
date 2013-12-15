@@ -8,7 +8,8 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.concurrent.TimeoutException;
 
-import com.stericson.RootTools.CommandCapture;
+import com.stericson.RootTools.exceptions.RootDeniedException;
+import com.stericson.RootTools.execution.CommandCapture;
 import com.stericson.RootTools.RootTools;
 
 public abstract class ShellUtils {
@@ -22,17 +23,18 @@ public abstract class ShellUtils {
 	public static final Boolean execute(String command) {
 		CommandCapture commands = new CommandCapture(0, command);
 		try {
-			RootTools.getShell(true).add(commands).waitForFinish();
+			RootTools.getShell(true).add(commands);
 			return true;
-		}
-		catch (InterruptedException e) {
-			L.e("InterruptedException: " + e.getMessage());
 		}
 		catch (IOException e) {
 			L.e("IOException: " + e.getMessage());
 		}
 		catch (TimeoutException e) {
 			L.e("TimeoutException: " + e.getMessage());
+		}
+		catch (RootDeniedException e)
+		{
+			L.e("Root Access Denied: " + e.getMessage());
 		}
 		return false;
 	}

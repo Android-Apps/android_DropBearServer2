@@ -41,11 +41,11 @@ public abstract class Utils {
 	}
 
 	public static final Boolean remountReadWrite(String path) {
-		return RootTools.remount(path, "RW");
+		return RootTools.remount(path, "rw");
 	}
 
 	public static final Boolean remountReadOnly(String path) {
-		return RootTools.remount(path, "RO");
+		return RootTools.remount(path, "ro");
 	}
 
 	public static Boolean hasStorage(Boolean requireWriteAccess) {
